@@ -12,8 +12,8 @@
 		"autoAudits": false
 	},
 	"compileType": "miniprogram",
-	"libVersion": "2.6.5",
-	"appid": "wx5d68a3bf91c7412e",
+	"libVersion": "2.11.0",
+	"appid": "wxadbf4aa48ae4e9b7",
 	"projectname": "blueManager",
 	"debugOptions": {
 		"hidedInDevtools": []

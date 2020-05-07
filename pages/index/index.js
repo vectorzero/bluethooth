@@ -47,6 +47,7 @@ Page({
     devices: [],
     connected: false,
     chs: [],
+    lastList: []
   },
   onLoad() {
     wx.getSystemInfo({
@@ -57,6 +58,9 @@ Page({
   },
   //初始化蓝牙模块
   openBluetoothAdapter() {
+    this.setData({
+      connected: false
+    })
     wx.openBluetoothAdapter({
       success: (res) => {
         console.log('openBluetoothAdapter success', res)
@@ -74,6 +78,7 @@ Page({
       }
     })
   },
+
   //获取本机蓝牙适配器状态
   getBluetoothAdapterState() {
     wx.getBluetoothAdapterState({
@@ -90,6 +95,7 @@ Page({
       }
     })
   },
+
   //开始搜寻附近的蓝牙外围设备
   startBluetoothDevicesDiscovery() {
     if (this._discoveryStarted) {
@@ -108,6 +114,9 @@ Page({
     })
   },
   stopBluetoothDevicesDiscovery() {
+    this.setData({
+      connected: false
+    })
     wx.stopBluetoothDevicesDiscovery()
   },
 
@@ -133,7 +142,6 @@ Page({
 
   //连接低功耗蓝牙设备
   createBLEConnection(e) {
-
     const ds = e.currentTarget.dataset
     const deviceId = ds.deviceId
     const name = ds.name
@@ -141,6 +149,7 @@ Page({
       deviceId,
       success: (res) => {
         this.setData({
+          lastList: [],
           connected: true,
           name,
           deviceId,
@@ -160,7 +169,7 @@ Page({
       deviceId,
       success: (res) => {
         for (let i = 0; i < res.services.length; i++) {
-          this.getBLEDeviceCharacteristics(deviceId, res.services[i].uuid)
+          this.getBLEDeviceCharacteristics(i, deviceId, res.services[i].uuid)
         }
       },
       fail: (res) => {
@@ -168,45 +177,79 @@ Page({
       }
     })
   },
+
   //获取蓝牙设备某个服务中所有特征值(characteristic)
-  getBLEDeviceCharacteristics(deviceId, serviceId) {
+  getBLEDeviceCharacteristics(index, deviceId, serviceId) {
+    const that = this
     wx.getBLEDeviceCharacteristics({
       deviceId,
       serviceId,
       success: (res) => {
-        console.log('getBLEDeviceCharacteristics success', res.characteristics)
+        // console.log('getBLEDeviceCharacteristics success', res.characteristics)
         for (let i = 0; i < res.characteristics.length; i++) {
+          let {
+            lastList
+          } = that.data
           let item = res.characteristics[i]
-          if (item.properties.read) {
-            wx.readBLECharacteristicValue({
-              deviceId,
-              serviceId,
-              characteristicId: item.uuid,
-            })
+          // if (item.properties.read) {
+          //   wx.readBLECharacteristicValue({
+          //     deviceId,
+          //     serviceId,
+          //     characteristicId: item.uuid,
+          //   })
+          // }
+          item.deviceId = deviceId
+          item.serviceId = serviceId
+          let obj = {
+            deviceId,
+            serviceId,
+            uuid: item.uuid,
+            // canWrite: item.properties.write,
+            key: index + '-' + i,
+            val: item
           }
           if (item.properties.write) {
-            this.setData({
-              canWrite: true
-            })
-            this._deviceId = deviceId
-            this._serviceId = serviceId
-            this._characteristicId = item.uuid
-            // this.writeBLECharacteristicValue()
-          }
-          if (item.properties.notify || item.properties.indicate) {
-            wx.notifyBLECharacteristicValueChange({
+            wx.writeBLECharacteristicValue({
               deviceId,
               serviceId,
               characteristicId: item.uuid,
-              state: true,
+              value: new ArrayBuffer(1),
+              success (res) {
+                obj.canWrite = true
+                lastList.push(obj)
+                that.setData({
+                  lastList
+                })
+              }
             })
           }
+          // if (item.properties.write) {
+          //   this.setData({
+          //     canWrite: true
+          //   })
+          //   this._deviceId = deviceId
+          //   this._serviceId = serviceId
+          //   this._characteristicId = item.uuid
+          //   // this.writeBLECharacteristicValue()
+          // }
+          // if (item.properties.notify || item.properties.indicate) {
+          //   wx.notifyBLECharacteristicValueChange({
+          //     deviceId,
+          //     serviceId,
+          //     characteristicId: item.uuid,
+          //     state: true,
+          //   })
+          // }
         }
+        that.onBLECharacteristicValueChange()
       },
       fail(res) {
         console.error('获取特征值失败：', res)
       }
     })
+  },
+
+  onBLECharacteristicValueChange() {
     // 操作之前先监听，保证第一时间获取数据
     wx.onBLECharacteristicValueChange((characteristic) => {
       const idx = inArray(this.data.chs, 'uuid', characteristic.characteristicId)
@@ -230,85 +273,68 @@ Page({
     })
   },
 
-  writeBLECharacteristicValue() {
+  writeBLECharacteristicValue(event) {
+    const obj = event.currentTarget.dataset.obj
     const data =
       `hello\r\nworld\r\n`
     var bufferstr = util.hexStringToBuff(data);
-    this.printMain(bufferstr)
+    console.log(obj.properties)
+    this.printMain(bufferstr, obj.deviceId, obj.serviceId, obj.uuid, obj.properties)
   },
 
-  printMain(buffer) {
+  printMain(buffer, deviceId, serviceId, uuid, properties) {
+    if (properties.notify || properties.indicate) {
+      wx.notifyBLECharacteristicValueChange({
+        deviceId,
+        serviceId,
+        characteristicId: uuid,
+        state: true,
+      })
+    }
+    this.setData({
+      deviceId
+    })
     //根据Android不同型号进行调整，保险起见20字节一包发送，iOS可以最大185个字节一包
     let datalen = 16;
     if (platform === 'ios') {
       datalen = 120;
     }
     let pos = 0;
-    let fail_count = 0;
     let bytes = buffer.byteLength;
-    let that = this;
+    const that = this;
     while (bytes > 0) {
       let tmpBuffer;
       if (bytes > datalen) {
         tmpBuffer = buffer.slice(pos, pos + datalen);
         pos += datalen;
         bytes -= datalen;
-        wx.writeBLECharacteristicValue({
-          deviceId: that._deviceId,
-          serviceId: that._serviceId,
-          characteristicId: that._characteristicId,
-          value: tmpBuffer,
-          success: function (res) {},
-          fail: function (res) {
-            fail_count++;
-          },
-          complete: function (res) {}
-        })
       } else {
         tmpBuffer = buffer.slice(pos, pos + bytes);
         pos += bytes;
         bytes -= bytes;
-        wx.writeBLECharacteristicValue({
-          deviceId: that._deviceId,
-          serviceId: that._serviceId,
-          characteristicId: that._characteristicId,
-          value: tmpBuffer,
-          success: function (res) {},
-          fail: function (res) {
-            fail_count++;
-          },
-          complete: function (res) {}
-        })
       }
+      console.log('deviceId', deviceId, 'serviceId', serviceId, 'uuid', uuid, 'tmpBuffer', tmpBuffer)
+      wx.writeBLECharacteristicValue({
+        deviceId,
+        serviceId,
+        characteristicId: uuid,
+        value: tmpBuffer,
+        success: function (res) {
+          wx.showToast({
+            title: '数据传输完成！',
+          });
+          that.closeBLEConnection()
+        },
+        fail: function (res) {
+          wx.showToast({
+            title: '数据传输失败！',
+          });
+        },
+        complete: function (res) {
+          that.onBLEConnectionStateChange()
+        }
+      })
     }
-    if (fail_count == 0) {
-      setTimeout(() => {
-        wx.hideLoading();
-      }, 5500)
-      setTimeout(() => {
-        wx.showToast({
-          title: '数据传输完成！',
-        });
-        that.stopBluetoothDevicesDiscovery();
-        that.closeBluetoothAdapter();
-        that.setData({
-          isConnected: false
-        });
-      }, 7000)
-    } else {
-      wx.showToast({
-        title: "传输数据失败",
-        icon: 'none',
-        image: e
-      });
-      wx.hideLoading();
-    }
-    // 避免重复点击打印 
-    setTimeout(() => {
-      that.setData({
-        startPrinterClick: false
-      });
-    }, 6000);
   },
 
   //断开与低功耗蓝牙设备的连接
@@ -318,14 +344,24 @@ Page({
     })
     this.setData({
       connected: false,
-      chs: [],
-      canWrite: false,
+      chs: []
     })
   },
+
   //关闭蓝牙模块
   closeBluetoothAdapter() {
+    this.setData({
+      connected: false
+    })
     wx.closeBluetoothAdapter()
     this._discoveryStarted = false
+  },
+
+  onBLEConnectionStateChange() {
+    wx.onBLEConnectionStateChange((res) => {
+      // 该方法回调中可以用于处理连接意外断开等异常情况
+      console.log(`device ${res.deviceId} state has changed, connected: ${res.connected}`)
+    })
   },
 
   sendStr: function (bufferstr, success, failed) {
