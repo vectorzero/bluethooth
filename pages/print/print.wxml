@@ -1,0 +1,19 @@
+<view class="container">
+  <button wx:if="{{printerName}}" bindtap="handlePrint">打印</button>
+  <view class="device-info" wx:if="{{printerBrand}}">
+    <view>
+      <text>品牌：</text>
+      <text>{{printerBrand}}</text>
+    </view>
+    <view>
+      <text>型号：</text>
+      <text>{{printerName}}</text>
+    </view>
+    <image class="{{printerName}}" wx:if="{{printerName}}" src="/images/print/{{printerName}}.jpg"></image>
+  </view>
+  <button wx:if="{{devicesData.length}}" bindtap="scanBlue">扫码识别</button>
+  <button class="search-btn" bindtap="startBluetooth">重新搜索</button>
+  <button wx:if="{{printerName}}" class="search-btn" bindtap="closeDevice">断开连接</button>
+  <view class="device-item {{currentDeviceId === item.deviceId ? 'active' : ''}}" wx:for="{{devicesData}}"
+    bindtap="handleConnect" data-id="{{item.deviceId}}" data-name="{{item.name}}">{{item.name}}</view>
+</view>

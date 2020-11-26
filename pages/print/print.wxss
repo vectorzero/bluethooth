@@ -1,0 +1,34 @@
+.search-btn {
+  margin: 20rpx 0;
+}
+
+.device-info {
+  margin-bottom: 20rpx;
+}
+
+.device-item {
+  width: 100%;
+  text-align: center;
+  margin: 20rpx 0;
+  padding: 20rpx 0;
+  background: #eee;
+}
+
+.device-item.active {
+  color: red;
+}
+
+.CC3 {
+  width: 240rpx;
+  height: 200rpx;
+}
+
+.XT423 {
+  width: 200rpx;
+  height: 200rpx;
+}
+
+.HM-A300 {
+  width: 200rpx;
+  height: 200rpx;
+}
